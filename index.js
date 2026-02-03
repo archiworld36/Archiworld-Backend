@@ -14,7 +14,7 @@ app.set("trust proxy", true); // Add this line
 
 app.use(
   cors({
-    origin: "http://localhost:3000", // Replace '*' with actual origin in production
+    origin: "https://admin.archiworld.in", // Replace '*' with actual origin in production
     credentials: true,
   })
 );
