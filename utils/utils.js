@@ -22,7 +22,7 @@ const generateToken = (user) => {
     process.env.JWT_SECRET,
     {
       expiresIn: `${process.env.TOKEN_VALID_DAYS}d`,
-    }
+    },
   );
 };
 
@@ -39,7 +39,7 @@ const getUserAndDescendantNames = async (parentId) => {
   const fetchChildren = async (currentParentId) => {
     const children = await User.find(
       { parentId: currentParentId },
-      { _id: 1, username: 1 }
+      { _id: 1, username: 1 },
     );
 
     for (const child of children) {
@@ -53,4 +53,35 @@ const getUserAndDescendantNames = async (parentId) => {
   return result;
 };
 
-module.exports = { generateToken, matchPassword, getUserAndDescendantNames };
+const getUserAndDescendantIds = async (parentId) => {
+  const result = [];
+
+  // include self
+  const parentUser = await User.findById(parentId).select("username");
+  if (parentUser) {
+    result.push(parentUser._id);
+  }
+
+  const fetchChildren = async (currentParentId) => {
+    const children = await User.find(
+      { parentId: currentParentId },
+      { _id: 1, username: 1 },
+    );
+
+    for (const child of children) {
+      result.push(child._id);
+      await fetchChildren(child._id);
+    }
+  };
+
+  await fetchChildren(parentId);
+
+  return result;
+};
+
+module.exports = {
+  generateToken,
+  matchPassword,
+  getUserAndDescendantNames,
+  getUserAndDescendantIds,
+};

@@ -9,12 +9,15 @@ const {
   editUser,
   changePassword,
   deleteUser,
+  getUserById,
+  forgotPassword,
 } = require("../controllers/authController.js");
 
 const { auth } = require("../middlewares/auth.js");
 const { sendOtp, resendOtp, verifyOtp } = require("../controllers/otp.js");
 const { createPlan, getPlans, getPlanById, updatePlan, deletePlan } = require("../controllers/subscriptionController.js");
 const { upload } = require("../middlewares/upload.js")
+
 router.post(
   "/register",
   auth,
@@ -39,9 +42,11 @@ router.put(
   editUser
 );
 router.post("/login", loginUser);
-router.get("/parent", auth, getAllChildUsers);
+router.get("/get-user/:userId", auth, getUserById);
+router.post("/parent", auth, getAllChildUsers);
 router.delete("/delete-user/:userId", auth, deleteUser);
 router.put("/change-password", auth, changePassword);
+router.put("/forgot-password", forgotPassword);
 router.post("/logout", logoutUser);
 router.post("/send-otp", sendOtp);
 router.post("/resend-otp", resendOtp);

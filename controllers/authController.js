@@ -6,7 +6,8 @@ const {
   generateToken,
   getUserAndDescendantNames,
 } = require("../utils/utils");
-const {uploadStreamToS3} = require("../config/uploadToS3");
+const { uploadStreamToS3 } = require("../config/uploadToS3");
+const emailOTP = require("../models/emailOTP");
 // REGISTER USER
 const registerUser = async (req, res) => {
   try {
@@ -15,6 +16,8 @@ const registerUser = async (req, res) => {
       contactPerson,
       email,
       mobile,
+      whatsappMobile,
+      website,
       username,
       password,
       address,
@@ -22,6 +25,8 @@ const registerUser = async (req, res) => {
       city,
       workingSchedule,
       serviceState,
+      category,
+      subCategories,
       about,
       emailVerified,
       subscription,
@@ -32,9 +37,9 @@ const registerUser = async (req, res) => {
       ? JSON.parse(workingSchedule)
       : null;
 
-    const parsedServiceState = serviceState
-      ? JSON.parse(serviceState)
-      : [];
+    const parsedServiceState = serviceState ? JSON.parse(serviceState) : [];
+    const parsedCategory = category ? JSON.parse(category) : [];
+    const parsedSubCategory = subCategories ? JSON.parse(subCategories) : [];
 
     // ---- FILE HANDLING ----
     let profileLogo = null;
@@ -44,27 +49,21 @@ const registerUser = async (req, res) => {
     if (req.files?.profileLogo?.[0]) {
       profileLogo = await uploadStreamToS3(
         req.files.profileLogo[0],
-        "profiles"
+        "profiles",
       );
     }
 
     if (req.files?.bannerImage?.[0]) {
-      bannerImage = await uploadStreamToS3(
-        req.files.bannerImage[0],
-        "banners"
-      );
+      bannerImage = await uploadStreamToS3(req.files.bannerImage[0], "banners");
     }
 
     if (req.files?.cataloguePdf && req.files?.catalogueBanner) {
       for (let i = 0; i < req.files.cataloguePdf.length; i++) {
         catalogues.push({
-          pdf: await uploadStreamToS3(
-            req.files.cataloguePdf[i],
-            "catalogues"
-          ),
+          pdf: await uploadStreamToS3(req.files.cataloguePdf[i], "catalogues"),
           banner: await uploadStreamToS3(
             req.files.catalogueBanner[i],
-            "catalogues"
+            "catalogues",
           ),
         });
       }
@@ -88,7 +87,7 @@ const registerUser = async (req, res) => {
 
     const hashedPassword = await bcrypt.hash(
       password,
-      parseInt(process.env.JWT_SALT)
+      parseInt(process.env.JWT_SALT),
     );
 
     const newUser = await User.create({
@@ -96,12 +95,16 @@ const registerUser = async (req, res) => {
       contactPerson,
       email,
       mobile,
+      whatsappMobile,
+      website,
       username,
       password: hashedPassword,
       address,
       state,
       city,
       serviceState: parsedServiceState,
+      category: parsedCategory,
+      subCategories: parsedSubCategory,
       workingSchedule: parsedWorkingSchedule,
       about,
       emailVerified,
@@ -145,7 +148,7 @@ const editUser = async (req, res) => {
 
     // -------- JSON FIELDS --------
     Object.keys(req.body).forEach((key) => {
-      if (["workingSchedule", "serviceState"].includes(key)) {
+      if (["workingSchedule", "serviceState", "category", "subCategories"].includes(key)) {
         updateData[key] = JSON.parse(req.body[key]);
       } else {
         updateData[key] = req.body[key];
@@ -154,19 +157,13 @@ const editUser = async (req, res) => {
 
     // -------- PROFILE LOGO --------
     if (req.files?.profileLogo?.length) {
-      const url = await uploadStreamToS3(
-        req.files.profileLogo[0],
-        "profiles"
-      );
+      const url = await uploadStreamToS3(req.files.profileLogo[0], "profiles");
       updateData.profileLogo = url;
     }
 
     // -------- BANNER IMAGE --------
     if (req.files?.bannerImage?.length) {
-      const url = await uploadStreamToS3(
-        req.files.bannerImage[0],
-        "banners"
-      );
+      const url = await uploadStreamToS3(req.files.bannerImage[0], "banners");
       updateData.bannerImage = url;
     }
 
@@ -180,13 +177,10 @@ const editUser = async (req, res) => {
     if (req.files?.cataloguePdf && req.files?.catalogueBanner) {
       for (let i = 0; i < req.files.cataloguePdf.length; i++) {
         newCatalogues.push({
-          pdf: await uploadStreamToS3(
-            req.files.cataloguePdf[i],
-            "catalogues"
-          ),
+          pdf: await uploadStreamToS3(req.files.cataloguePdf[i], "catalogues"),
           banner: await uploadStreamToS3(
             req.files.catalogueBanner[i],
-            "catalogues"
+            "catalogues",
           ),
         });
       }
@@ -221,6 +215,32 @@ const editUser = async (req, res) => {
     });
   } catch (err) {
     console.error(err);
+    res.status(500).json({ message: "Server error" });
+  }
+};
+
+const getUserById = async (req, res) => {
+  try {
+    const parentId = req.userId;
+    if (!parentId)
+      return res.status(400).json({ message: "User ID is required" });
+
+    const descendantUsernames = await getUserAndDescendantNames(parentId);
+
+    let users = await User.findOne({
+      _id: req.params.userId,
+      username: { $in: descendantUsernames },
+    })
+      .select("-password")
+      .populate("subscription");
+    let parentName = null;
+    const parent = await User.findById(users.parentId).select("name");
+    parentName = parent?.name || null;
+    const usersWithParent = { ...users.toObject(), parentName };
+
+    res.json({ users: usersWithParent });
+  } catch (err) {
+    console.error("Error fetching users recursively:", err);
     res.status(500).json({ message: "Server error" });
   }
 };
@@ -262,25 +282,56 @@ const getAllChildUsers = async (req, res) => {
     const parentId = req.userId;
     if (!parentId)
       return res.status(400).json({ message: "User ID is required" });
+    const { search = "", skip = "0", take = "25" } = req.body;
+    const parsedSkip = parseInt(skip, 10) || 0;
+    const parsedTake = parseInt(take, 10) || 25;
 
     const descendantUsernames = await getUserAndDescendantNames(parentId);
 
-    const users = await User.find({
-      username: { $in: descendantUsernames },
-    }).populate("subscription");
-
-    const usersWithParent = await Promise.all(
-      users.map(async (user) => {
-        let parentName = null;
-        if (user.parentId) {
-          const parent = await User.findById(user.parentId).select("name");
-          parentName = parent?.name || null;
+    // 🔍 Search condition
+    const searchQuery = search
+      ? {
+          $or: [
+            { name: { $regex: search, $options: "i" } },
+            { contactPerson: { $regex: search, $options: "i" } },
+            { email: { $regex: search, $options: "i" } },
+            { username: { $regex: search, $options: "i" } },
+            { mobile: { $regex: search, $options: "i" } },
+            { whatsappMobile: { $regex: search, $options: "i" } },
+            { website: { $regex: search, $options: "i" } },
+            { address: { $regex: search, $options: "i" } },
+          ],
         }
-        return { ...user.toObject(), parentName };
-      })
-    );
+      : {};
 
-    res.json({ users: usersWithParent });
+    const filter = {
+      username: { $in: descendantUsernames },
+      ...searchQuery,
+    };
+
+    // ✅ Total count (important for paginator)
+    const totalCount = await User.countDocuments(filter);
+
+    const users = await User.find(filter, {
+      name: 1,
+      contactPerson: 1,
+      email: 1,
+      mobile: 1,
+      username: 1,
+      address: 1,
+    })
+      .populate({
+        path: "subscription",
+        select: "name",
+      })
+      .skip(parsedSkip)
+      .limit(parsedTake)
+      .sort({ createdAt: -1 });
+
+    res.status(201).json({
+      users,
+      totalCount,
+    });
   } catch (err) {
     console.error("Error fetching users recursively:", err);
     res.status(500).json({ message: "Server error" });
@@ -308,11 +359,10 @@ const changePassword = async (req, res) => {
 
     const hashedNewPassword = await bcrypt.hash(
       newPassword,
-      parseInt(process.env.JWT_SALT)
+      parseInt(process.env.JWT_SALT),
     );
 
     user.password = hashedNewPassword;
-    user.modifiedBy = req.username;
     await user.save();
 
     res.status(200).json({ message: "Password changed successfully" });
@@ -349,6 +399,36 @@ const logoutUser = async (req, res) => {
   }
 };
 
+const forgotPassword = async (req, res) => {
+  try {
+    const { email, otp, newPassword } = req.body;
+
+    if (!email || !otp || !newPassword)
+      return res.status(400).json({ message: "All fields are required" });
+
+    const record = await emailOTP.findOne({ email });
+    if (!record || record.otp !== Number(otp)) {
+      return res.status(400).json({ message: "Email id is not verified" });
+    }
+
+    const user = await User.findOne({ email });
+    if (!user) return res.status(404).json({ message: "User not found" });
+
+    const hashedNewPassword = await bcrypt.hash(
+      newPassword,
+      parseInt(process.env.JWT_SALT),
+    );
+
+    user.password = hashedNewPassword;
+    await user.save();
+
+    res.status(200).json({ message: "Password changed successfully" });
+  } catch (err) {
+    console.error("Change password error:", err);
+    res.status(500).json({ message: "Server error" });
+  }
+};
+
 module.exports = {
   registerUser,
   loginUser,
@@ -357,4 +437,6 @@ module.exports = {
   deleteUser,
   editUser,
   logoutUser,
+  getUserById,
+  forgotPassword,
 };
