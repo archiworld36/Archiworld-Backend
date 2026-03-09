@@ -20,7 +20,7 @@ const categorySchema = new Schema(
       required: true,
     },
   },
-  { timestamps: true }
+  { timestamps: true },
 );
 
 module.exports = model("Category", categorySchema);
