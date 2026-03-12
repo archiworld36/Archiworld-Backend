@@ -74,7 +74,7 @@ const updateBrand = async (req, res) => {
 const deleteBrand = async (req, res) => {
   try {
     const brand = await Brand.findById({ _id: req.params.id });
-    if (!subCategory) return res.status(404).json({ message: "Not found" });
+    if (!brand) return res.status(404).json({ message: "Not found" });
 
     await brand.deleteOne();
     res.status(201).json({ id: req.params.id, message: "Brand deleted" });
