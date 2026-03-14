@@ -18,6 +18,10 @@ app.use(
       "https://admin.archiworld.in",
       "http://localhost:3000",
       "http://localhost:3001",
+      "http://3.108.61.216",
+      "http://archiworld.in",
+      "https://archiworld.in",
+      "https://demo.archiworld.in",
     ], // Replace '*' with actual origin in production
     credentials: true,
   }),
