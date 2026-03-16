@@ -384,11 +384,11 @@ const deleteProduct = async (req, res) => {
     const userId = req.userId;
     const { productId } = req.params;
 
-    const descendantFilter = await getUserAndDescendantIds(userId);
+    const descendantIds = await getUserAndDescendantIds(userId);
 
     const product = await Product.findOne({
       _id: productId,
-      ...descendantFilter,
+      user: { $in: descendantIds },
     });
 
     if (!product) return res.status(403).json({ message: "Unauthorized" });
