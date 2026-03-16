@@ -6,7 +6,8 @@ const {
   createProduct,
   updateProduct,
   getProductsByUserId,
-  getProductsByProductId
+  getProductsByProductId,
+  deleteProduct
 } = require("../controllers/productsController.js");
 
 router.post(
@@ -33,6 +34,6 @@ router.put(
 );
 router.get("/get-products-by-user-id", auth, getProductsByUserId);
 router.get("/get-product/:productId", auth, getProductsByProductId);
-
+router.delete("/delete-product/:productId", auth, deleteProduct)
 
 module.exports = router;

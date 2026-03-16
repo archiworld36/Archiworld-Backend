@@ -382,12 +382,12 @@ const updateProduct = async (req, res) => {
 const deleteProduct = async (req, res) => {
   try {
     const userId = req.userId;
-    const { id } = req.params;
+    const { productId } = req.params;
 
     const descendantFilter = await getUserAndDescendantIds(userId);
 
     const product = await Product.findOne({
-      _id: id,
+      _id: productId,
       ...descendantFilter,
     });
 
