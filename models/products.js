@@ -41,6 +41,10 @@ const productSchema = new Schema(
       type: Types.ObjectId,
       ref: "SubCategory",
     },
+    subSubCategory: {
+      type: Types.ObjectId,
+      ref: "SubSubCategory",
+    },
     category: {
       type: Types.ObjectId,
       ref: "Category",
@@ -59,6 +63,7 @@ const productSchema = new Schema(
     features: [{ type: String }],
     bannerImage: String,
     images: [{ type: String }],
+    featuredProduct: { type: Boolean },
     catalogues: [catalogueSchema],
     createdAt: { type: Date, default: Date.now },
     modifiedAt: { type: Date, default: Date.now },

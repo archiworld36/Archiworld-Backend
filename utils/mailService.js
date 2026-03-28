@@ -1,13 +1,7 @@
 require("isomorphic-fetch");
 const nodemailer = require("nodemailer");
-const dotenv = require("dotenv");
-dotenv.config();
 
-async function sendMailFromGmail(
-  to,
-  subject,
-  htmlContent,
-) {
+async function sendMailFromGmail(to, subject, htmlContent) {
   try {
     let transporter = nodemailer.createTransport({
       host: "smtp.gmail.com",
@@ -39,4 +33,4 @@ async function sendMailFromGmail(
   }
 }
 
-module.exports = sendMailFromGmail
+module.exports = sendMailFromGmail;

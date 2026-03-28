@@ -29,6 +29,7 @@ const registerUser = async (req, res) => {
       subCategories,
       about,
       emailVerified,
+      phoneVerified,
       subscription,
     } = req.body;
 
@@ -108,6 +109,7 @@ const registerUser = async (req, res) => {
       workingSchedule: parsedWorkingSchedule,
       about,
       emailVerified,
+      phoneVerified,
       subscription: subscriptionId,
       profileLogo,
       bannerImage,
@@ -148,7 +150,14 @@ const editUser = async (req, res) => {
 
     // -------- JSON FIELDS --------
     Object.keys(req.body).forEach((key) => {
-      if (["workingSchedule", "serviceState", "category", "subCategories"].includes(key)) {
+      if (
+        [
+          "workingSchedule",
+          "serviceState",
+          "category",
+          "subCategories",
+        ].includes(key)
+      ) {
         updateData[key] = JSON.parse(req.body[key]);
       } else {
         updateData[key] = req.body[key];
@@ -402,17 +411,21 @@ const logoutUser = async (req, res) => {
 const forgotPassword = async (req, res) => {
   try {
     const { email, otp, newPassword } = req.body;
+    if (!email) {
+      return res.status(400).json({ message: "Enter Email Id or Username" });
+    }
 
+    const query = email.includes("@") ? { email: email } : { username: email };
+
+    const user = await User.findOne(query);
+    if (!user) return res.status(404).json({ message: "User not found" });
     if (!email || !otp || !newPassword)
       return res.status(400).json({ message: "All fields are required" });
 
-    const record = await emailOTP.findOne({ email });
+    const record = await emailOTP.findOne({ email: user.email });
     if (!record || record.otp !== Number(otp)) {
       return res.status(400).json({ message: "Email id is not verified" });
     }
-
-    const user = await User.findOne({ email });
-    if (!user) return res.status(404).json({ message: "User not found" });
 
     const hashedNewPassword = await bcrypt.hash(
       newPassword,

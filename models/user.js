@@ -54,6 +54,7 @@ const userSchema = new Schema(
 
     about: { type: String },
     emailVerified: { type: Boolean },
+    phoneVerified: { type: Boolean },
     profileLogo: { type: String }, // image path
     bannerImage: { type: String }, // image path
     catalogues: [catalogueSchema],

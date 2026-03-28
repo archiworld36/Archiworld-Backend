@@ -1,5 +1,5 @@
 const { uploadStreamToS3 } = require("../config/uploadToS3");
-const SubSubCategory = require("../models/subSubCategories")
+const SubSubCategory = require("../models/subSubCategories");
 // CREATE
 const createSubSubCategory = async (req, res) => {
   try {
@@ -32,9 +32,9 @@ const createSubSubCategory = async (req, res) => {
     res.status(201).json(subSubCategory);
   } catch (err) {
     if (err.code === 11000) {
-      return res
-        .status(400)
-        .json({ message: "Sub-Sub-Category name already exists in same category" });
+      return res.status(400).json({
+        message: "Sub-Sub-Category name already exists in same category",
+      });
     }
     res.status(400).json({ message: err.message });
   }
@@ -59,7 +59,9 @@ const updateSubSubCategory = async (req, res) => {
     const subSubCategoryId = req.params.id;
 
     if (!name) {
-      return res.status(400).json({ message: "Sub-Sub-Category name is required" });
+      return res
+        .status(400)
+        .json({ message: "Sub-Sub-Category name is required" });
     }
 
     // 🔍 Check if name already exists for a DIFFERENT category
@@ -104,11 +106,15 @@ const updateSubSubCategory = async (req, res) => {
 // DELETE
 const deleteSubSubCategory = async (req, res) => {
   try {
-    const subSubCategory = await SubSubCategory.findById({ _id: req.params.id });
+    const subSubCategory = await SubSubCategory.findById({
+      _id: req.params.id,
+    });
     if (!subSubCategory) return res.status(404).json({ message: "Not found" });
 
     await subSubCategory.deleteOne();
-    res.status(201).json({ id: req.params.id, message: "Sub-Sub-Category deleted" });
+    res
+      .status(201)
+      .json({ id: req.params.id, message: "Sub-Sub-Category deleted" });
   } catch (err) {
     res.status(500).json({ message: err.message });
   }

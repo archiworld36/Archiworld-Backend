@@ -8,6 +8,7 @@ const createProduct = async (req, res) => {
       name,
       description,
       subCategory,
+      subSubCategory,
       category,
       material,
       brand,
@@ -17,6 +18,7 @@ const createProduct = async (req, res) => {
       price,
       features,
       catalogues,
+      featuredProduct,
     } = req.body;
 
     const userId = req.userId;
@@ -81,11 +83,12 @@ const createProduct = async (req, res) => {
       name,
       description,
       subCategory,
+      subSubCategory,
       category,
       material,
       brand,
       location,
-
+      featuredProduct,
       bannerImage,
       images,
 
@@ -131,6 +134,9 @@ const getProductsByUserId = async (req, res) => {
         path: "subCategory", // ✅ populate subCategory
       })
       .populate({
+        path: "subSubCategory",
+      })
+      .populate({
         path: "category", // ✅ populate category
       })
       .populate({
@@ -164,6 +170,7 @@ const getProductsByProductId = async (req, res) => {
       })
       .populate("category")
       .populate("subCategory")
+      .populate("subSubCategory")
       .populate("brand")
       .populate("material")
       .lean();
@@ -178,6 +185,7 @@ const getProducts = async (req, res) => {
     const {
       color,
       subCategoryId,
+      subSubCategoryId,
       material,
       brand,
       minLength,
@@ -203,6 +211,9 @@ const getProducts = async (req, res) => {
         path: "subCategory", // ✅ populate subCategory
       })
       .populate({
+        path: "subSubCategory", // ✅ populate subSubCategory
+      })
+      .populate({
         path: "category", // ✅ populate category
       })
       .populate({
@@ -220,6 +231,8 @@ const getProducts = async (req, res) => {
 
       if (color && product.color === color) matchScore++;
       if (subCategoryId && product.subCategoryId === subCategoryId)
+        matchScore++;
+      if (subSubCategoryId && product.subSubCategoryId === subSubCategoryId)
         matchScore++;
       if (material && product.material === material) matchScore++;
       if (brand && product.brand === brand) matchScore++;
