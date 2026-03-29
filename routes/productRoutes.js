@@ -7,7 +7,11 @@ const {
   updateProduct,
   getProductsByUserId,
   getProductsByProductId,
-  deleteProduct
+  deleteProduct,
+  getFeaturedProducts,
+  getProductsDetailsById,
+  getSuggestedProducts,
+  getProducts,
 } = require("../controllers/productsController.js");
 
 router.post(
@@ -32,8 +36,12 @@ router.put(
   ]),
   updateProduct,
 );
+router.delete("/delete-product/:productId", auth, deleteProduct);
+router.post("/products", getProducts);
+router.get("/get-featured-products", getFeaturedProducts);
+router.get("/get-product-details/:productId", getProductsDetailsById);
+router.get("/suggested-products/:productId", getSuggestedProducts);
 router.get("/get-products-by-user-id", auth, getProductsByUserId);
 router.get("/get-product/:productId", auth, getProductsByProductId);
-router.delete("/delete-product/:productId", auth, deleteProduct)
 
 module.exports = router;

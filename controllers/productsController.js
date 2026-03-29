@@ -1,6 +1,10 @@
+const mongoose = require("mongoose");
 const { uploadStreamToS3 } = require("../config/uploadToS3");
 const Product = require("../models/products");
 const { getUserAndDescendantIds } = require("../utils/utils");
+const { Types } = require("mongoose");
+
+const toObjectIdArray = (arr) => arr.map((id) => new Types.ObjectId(id));
 
 const createProduct = async (req, res) => {
   try {
@@ -116,163 +120,6 @@ const createProduct = async (req, res) => {
   }
 };
 
-const getProductsByUserId = async (req, res) => {
-  try {
-    const parentId = req.userId;
-    const descendantIds = await getUserAndDescendantIds(parentId);
-    const products = await Product.find({
-      user: { $in: descendantIds },
-    })
-      .populate({
-        path: "user",
-        select: "-password",
-        populate: {
-          path: "subscription",
-        },
-      })
-      .populate({
-        path: "subCategory", // ✅ populate subCategory
-      })
-      .populate({
-        path: "subSubCategory",
-      })
-      .populate({
-        path: "category", // ✅ populate category
-      })
-      .populate({
-        path: "material", // ✅ populate material
-      })
-      .populate({
-        path: "brand", // ✅ populate brand
-      })
-      .lean();
-    res.status(200).json({ products: products });
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-};
-
-const getProductsByProductId = async (req, res) => {
-  try {
-    const parentId = req.userId;
-    const { productId } = req.params;
-    const descendantIds = await getUserAndDescendantIds(parentId);
-    const product = await Product.findOne({
-      _id: productId,
-      user: { $in: descendantIds },
-    })
-      .populate({
-        path: "user",
-        select: "-password",
-        populate: {
-          path: "subscription",
-        },
-      })
-      .populate("category")
-      .populate("subCategory")
-      .populate("subSubCategory")
-      .populate("brand")
-      .populate("material")
-      .lean();
-    res.status(200).json({ products: product });
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-};
-
-const getProducts = async (req, res) => {
-  try {
-    const {
-      color,
-      subCategoryId,
-      subSubCategoryId,
-      material,
-      brand,
-      minLength,
-      maxLength,
-      minWidth,
-      maxWidth,
-      minHeight,
-      maxHeight,
-      minWeight,
-      maxWeight,
-      location,
-    } = req.body;
-
-    const products = await Product.find({})
-      .populate({
-        path: "user",
-        select: "-password",
-        populate: {
-          path: "subscription",
-        },
-      })
-      .populate({
-        path: "subCategory", // ✅ populate subCategory
-      })
-      .populate({
-        path: "subSubCategory", // ✅ populate subSubCategory
-      })
-      .populate({
-        path: "category", // ✅ populate category
-      })
-      .populate({
-        path: "material", // ✅ populate material
-      })
-      .populate({
-        path: "brand", // ✅ populate brand
-      })
-      .lean();
-
-    const filtersExist = color || material || brand || minLength || location;
-
-    const sorted = products.map((product) => {
-      let matchScore = 0;
-
-      if (color && product.color === color) matchScore++;
-      if (subCategoryId && product.subCategoryId === subCategoryId)
-        matchScore++;
-      if (subSubCategoryId && product.subSubCategoryId === subSubCategoryId)
-        matchScore++;
-      if (material && product.material === material) matchScore++;
-      if (brand && product.brand === brand) matchScore++;
-      if (location && product.location === location) matchScore++;
-
-      if (minLength && product.length >= minLength) matchScore++;
-      if (maxLength && product.length <= maxLength) matchScore++;
-
-      if (minWidth && product.width >= minWidth) matchScore++;
-      if (maxWidth && product.width <= maxWidth) matchScore++;
-
-      if (minHeight && product.height >= minHeight) matchScore++;
-      if (maxHeight && product.height <= maxHeight) matchScore++;
-
-      if (minWeight && product.weight >= minWeight) matchScore++;
-      if (maxWeight && product.weight <= maxWeight) matchScore++;
-
-      return {
-        ...product,
-        matchScore,
-        priority: product.user?.subscription?.priority || 999,
-      };
-    });
-
-    sorted.sort((a, b) => {
-      if (filtersExist) {
-        if (b.matchScore !== a.matchScore) {
-          return b.matchScore - a.matchScore; // higher match first
-        }
-      }
-
-      return a.priority - b.priority; // lower priority number first
-    });
-
-    res.json(sorted);
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-};
-
 const updateProduct = async (req, res) => {
   try {
     const userId = req.userId;
@@ -382,7 +229,7 @@ const updateProduct = async (req, res) => {
 
     await product.save();
 
-    res.json({
+    res.status(200).json({
       message: "Product updated successfully",
       product,
     });
@@ -408,9 +255,502 @@ const deleteProduct = async (req, res) => {
 
     await product.deleteOne();
 
-    res.json({ message: "Deleted successfully" });
+    res.status(200).json({ message: "Deleted successfully" });
   } catch (err) {
     res.status(500).json({ error: err.message });
+  }
+};
+
+const getProductsByUserId = async (req, res) => {
+  try {
+    const parentId = req.userId;
+    const descendantIds = await getUserAndDescendantIds(parentId);
+    const products = await Product.find({
+      user: { $in: descendantIds },
+    })
+      .populate({
+        path: "user",
+        select: "-password",
+        populate: {
+          path: "subscription",
+        },
+      })
+      .populate({
+        path: "subCategory", // ✅ populate subCategory
+      })
+      .populate({
+        path: "subSubCategory",
+      })
+      .populate({
+        path: "category", // ✅ populate category
+      })
+      .populate({
+        path: "material", // ✅ populate material
+      })
+      .populate({
+        path: "brand", // ✅ populate brand
+      })
+      .lean();
+    res.status(200).json({ products: products });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+};
+
+const getProductsByProductId = async (req, res) => {
+  try {
+    const parentId = req.userId;
+    const { productId } = req.params;
+    const descendantIds = await getUserAndDescendantIds(parentId);
+    const product = await Product.findOne({
+      _id: productId,
+      user: { $in: descendantIds },
+    })
+      .populate({
+        path: "user",
+        select: "-password",
+        populate: {
+          path: "subscription",
+        },
+      })
+      .populate("category")
+      .populate("subCategory")
+      .populate("subSubCategory")
+      .populate("brand")
+      .populate("material")
+      .lean();
+    res.status(200).json({ products: product });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+};
+
+const getProducts = async (req, res) => {
+  try {
+    let {
+      page = 1,
+      limit = 24,
+      search = "",
+      sortBy = "",
+      locations,
+      subCategories,
+      subSubCategories,
+      brands,
+      materials,
+      colors,
+      minPrice,
+      maxPrice,
+      minLength,
+      maxLength,
+      minWidth,
+      maxWidth,
+      minHeight,
+      maxHeight,
+      minWeight,
+      maxWeight,
+    } = req.body;
+
+    page = parseInt(page);
+    limit = parseInt(limit);
+
+    // ✅ helper (handle array/string)
+    const toArray = (val) =>
+      typeof val === "string" ? val.split(",") : val || [];
+
+    locations = toArray(locations);
+    subCategories = toArray(subCategories);
+    subSubCategories = toArray(subSubCategories);
+    brands = toArray(brands);
+    materials = toArray(materials);
+    colors = toArray(colors);
+
+    // ✅ ignore "Pan India"
+    if (locations.includes("Pan India")) {
+      locations = [];
+    }
+
+    const match = {};
+
+    // 🔍 BASIC FILTER SEARCH (direct fields only)
+    if (search) {
+      match.$or = [
+        { name: { $regex: search, $options: "i" } },
+        { description: { $regex: search, $options: "i" } },
+        { features: { $elemMatch: { $regex: search, $options: "i" } } },
+      ];
+    }
+
+    // 🧩 FILTERS
+    if (subCategories.length)
+      match.subCategory = { $in: toObjectIdArray(subCategories) };
+
+    if (subSubCategories.length)
+      match.subSubCategory = { $in: toObjectIdArray(subSubCategories) };
+
+    if (brands.length) match.brand = { $in: toObjectIdArray(brands) };
+
+    if (materials.length) match.material = { $in: toObjectIdArray(materials) };
+    if (colors.length) match.color = { $in: colors };
+
+    // 💰 PRICE
+    if (minPrice || maxPrice) {
+      match.$and = match.$and || [];
+
+      if (minPrice && maxPrice) {
+        match.$and.push({
+          "price.min": { $lte: Number(maxPrice) },
+          "price.max": { $gte: Number(minPrice) },
+        });
+      } else if (minPrice) {
+        match.$and.push({
+          "price.max": { $gte: Number(minPrice) },
+        });
+      } else if (maxPrice) {
+        match.$and.push({
+          "price.min": { $lte: Number(maxPrice) },
+        });
+      }
+    }
+
+    // 📏 SIZE
+    if (minLength || maxLength) {
+      match["size.length"] = {};
+      if (minLength) match["size.length"].$gte = Number(minLength);
+      if (maxLength) match["size.length"].$lte = Number(maxLength);
+    }
+
+    if (minWidth || maxWidth) {
+      match["size.width"] = {};
+      if (minWidth) match["size.width"].$gte = Number(minWidth);
+      if (maxWidth) match["size.width"].$lte = Number(maxWidth);
+    }
+
+    if (minHeight || maxHeight) {
+      match["size.height"] = {};
+      if (minHeight) match["size.height"].$gte = Number(minHeight);
+      if (maxHeight) match["size.height"].$lte = Number(maxHeight);
+    }
+
+    if (minWeight || maxWeight) {
+      match["size.weight"] = {};
+      if (minWeight) match["size.weight"].$gte = Number(minWeight);
+      if (maxWeight) match["size.weight"].$lte = Number(maxWeight);
+    }
+
+    // 🔽 SORT
+    let sort = { createdAt: -1 };
+
+    if (sortBy === "Price: Low to High") {
+      sort = { "price.min": 1, "price.max": 1 };
+    }
+
+    if (sortBy === "Price: High to Low") {
+      sort = { "price.min": -1, "price.max": -1 };
+    }
+
+    const searchRegex = search ? new RegExp(search, "i") : null;
+
+    // 🚀 AGGREGATION PIPELINE
+    const pipeline = [
+      { $match: match },
+
+      // 👤 USER (only for location filter, NOT search)
+      {
+        $lookup: {
+          from: "users",
+          localField: "user",
+          foreignField: "_id",
+          as: "user",
+        },
+      },
+      { $unwind: "$user" },
+
+      // 📍 LOCATION FILTER ONLY
+      ...(locations.length
+        ? [
+            {
+              $match: {
+                "user.state": { $in: locations },
+              },
+            },
+          ]
+        : []),
+
+      // 🏷 CATEGORY
+      {
+        $lookup: {
+          from: "categories",
+          localField: "category",
+          foreignField: "_id",
+          as: "category",
+        },
+      },
+      { $unwind: { path: "$category", preserveNullAndEmptyArrays: true } },
+
+      // 🏷 BRAND
+      {
+        $lookup: {
+          from: "brands",
+          localField: "brand",
+          foreignField: "_id",
+          as: "brand",
+        },
+      },
+      { $unwind: { path: "$brand", preserveNullAndEmptyArrays: true } },
+
+      // 🏷 MATERIAL
+      {
+        $lookup: {
+          from: "materials",
+          localField: "material",
+          foreignField: "_id",
+          as: "material",
+        },
+      },
+      { $unwind: { path: "$material", preserveNullAndEmptyArrays: true } },
+
+      // 🔍 GLOBAL SEARCH (NO user.city/state ❌)
+      ...(search
+        ? [
+            {
+              $match: {
+                $or: [
+                  { name: searchRegex },
+                  { description: searchRegex },
+                  { features: { $elemMatch: searchRegex } },
+                  { "category.name": searchRegex },
+                  { "brand.name": searchRegex },
+                  { "material.name": searchRegex },
+                ],
+              },
+            },
+          ]
+        : []),
+
+      // 🔽 SORT
+      { $sort: sort },
+
+      // 📄 PAGINATION
+      { $skip: (page - 1) * limit },
+      { $limit: limit },
+
+      // 🎯 FINAL RESPONSE SHAPE
+      {
+        $project: {
+          id: "$_id",
+          name: 1,
+          price: 1,
+          bannerImage: 1,
+          user: {
+            city: "$user.city",
+            state: "$user.state",
+          },
+          category: {
+            name: "$category.name",
+          },
+        },
+      },
+    ];
+
+    const products = await Product.aggregate(pipeline);
+
+    // 📊 TOTAL COUNT (without pagination)
+    const countPipeline = pipeline.filter(
+      (stage) => !stage.$skip && !stage.$limit && !stage.$sort,
+    );
+    countPipeline.push({ $count: "total" });
+
+    const totalResult = await Product.aggregate(countPipeline);
+    const total = totalResult[0]?.total || 0;
+
+    res.json({
+      products: products,
+      total,
+    });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: "Server Error" });
+  }
+};
+
+const getFeaturedProducts = async (req, res) => {
+  try {
+    const products = await Product.find({
+      featuredProduct: true,
+    })
+      .select("id name description bannerImage user") // only needed fields
+      .populate({
+        path: "user",
+        select: "id name profileLogo", // only required user fields
+      })
+      .sort({ createdAt: -1 });
+
+    res.status(200).json({
+      success: true,
+      count: products.length,
+      featuredProducts: products,
+    });
+  } catch (error) {
+    console.error("Error fetching featured products:", error);
+    res.status(500).json({
+      success: false,
+      message: "Failed to fetch featured products",
+    });
+  }
+};
+
+const getProductsDetailsById = async (req, res) => {
+  try {
+    const { productId } = req.params;
+    const product = await Product.findOne({
+      _id: productId,
+    })
+      .populate({
+        path: "user",
+        select: "-password",
+        populate: {
+          path: "subscription",
+        },
+      })
+      .populate("category")
+      .populate("subCategory")
+      .populate("subSubCategory")
+      .populate("brand")
+      .populate("material")
+      .lean();
+    res.status(200).json({ products: product });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+};
+
+const getSuggestedProducts = async (req, res) => {
+  try {
+    const { productId } = req.params;
+
+    if (!mongoose.Types.ObjectId.isValid(productId)) {
+      return res.status(400).json({ message: "Invalid productId" });
+    }
+
+    // 🔹 1. Get reference product
+    const refProduct = await Product.findById(productId);
+
+    if (!refProduct) {
+      return res.status(404).json({ message: "Product not found" });
+    }
+
+    let suggestions = [];
+    const addedIds = new Set(); // ✅ track unique products
+
+    // 🔹 Helper function
+    const fetchProducts = async (filter, limit) => {
+      return await Product.find({
+        ...filter,
+        _id: { $ne: productId }, // exclude current product
+      })
+        .limit(limit * 2) // ✅ over-fetch to handle duplicates
+        .populate("category", "name")
+        .populate("user", "city state");
+    };
+
+    // 🔹 Helper to safely push unique products
+    const addUniqueProducts = (data) => {
+      data.forEach((item) => {
+        const id = item._id.toString();
+
+        if (!addedIds.has(id) && suggestions.length < 4) {
+          suggestions.push(item);
+          addedIds.add(id);
+        }
+      });
+    };
+
+    let remaining = 4;
+
+    // 🔹 1st Preference (most strict)
+    if (remaining > 0) {
+      const data = await fetchProducts(
+        {
+          user: refProduct.user,
+          category: refProduct.category,
+          subCategory: refProduct.subCategory,
+          subSubCategory: refProduct.subSubCategory,
+        },
+        remaining,
+      );
+
+      addUniqueProducts(data);
+      remaining = 4 - suggestions.length;
+    }
+
+    // 🔹 2nd Preference
+    if (remaining > 0) {
+      const data = await fetchProducts(
+        {
+          user: refProduct.user,
+          category: refProduct.category,
+          subCategory: refProduct.subCategory,
+        },
+        remaining,
+      );
+
+      addUniqueProducts(data);
+      remaining = 4 - suggestions.length;
+    }
+
+    // 🔹 3rd Preference
+    if (remaining > 0) {
+      const data = await fetchProducts(
+        {
+          user: refProduct.user,
+          category: refProduct.category,
+        },
+        remaining,
+      );
+
+      addUniqueProducts(data);
+      remaining = 4 - suggestions.length;
+    }
+
+    // 🔹 4th Preference (least strict)
+    if (remaining > 0) {
+      const data = await fetchProducts(
+        {
+          user: refProduct.user,
+        },
+        remaining,
+      );
+
+      addUniqueProducts(data);
+    }
+
+    // 🔹 If still empty
+    if (!suggestions.length) {
+      return res.status(200).json({ suggestedProduct: [] });
+    }
+
+    // 🔹 Format response
+    const formatted = suggestions.map((item, i) => ({
+      id: i + 1,
+      _id: item._id,
+      name: item.name,
+      user: {
+        city: item.user?.city || "",
+        state: item.user?.state || "",
+      },
+      price: item.price,
+      category: {
+        name: item.category?.name || "",
+      },
+      bannerImage: item.bannerImage,
+    }));
+
+    return res.status(200).json({
+      suggestedProduct: formatted,
+    });
+  } catch (error) {
+    console.error("Suggested Products Error:", error);
+    return res.status(500).json({ message: "Server error" });
   }
 };
 
@@ -421,4 +761,7 @@ module.exports = {
   getProductsByProductId,
   updateProduct,
   deleteProduct,
+  getFeaturedProducts,
+  getProductsDetailsById,
+  getSuggestedProducts,
 };
