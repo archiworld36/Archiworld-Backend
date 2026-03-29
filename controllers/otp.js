@@ -1,5 +1,5 @@
 const EmailOtp = require("../models/emailOTP");
-const phoneOTP = require("../models/phoneOTP");
+const phoneOTP = require("../models/phoneOtp");
 const User = require("../models/user");
 const sendMailFromGmail = require("../utils/mailService");
 const sendOtpSMS = require("../utils/msg91Service");
