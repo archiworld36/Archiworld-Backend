@@ -346,14 +346,12 @@ const getProducts = async (req, res) => {
       maxWidth,
       minHeight,
       maxHeight,
-      minWeight,
-      maxWeight,
     } = req.body;
 
     page = parseInt(page);
     limit = parseInt(limit);
 
-    // ✅ helper (handle array/string)
+    // ✅ helper
     const toArray = (val) =>
       typeof val === "string" ? val.split(",") : val || [];
 
@@ -371,15 +369,6 @@ const getProducts = async (req, res) => {
 
     const match = {};
 
-    // 🔍 BASIC FILTER SEARCH (direct fields only)
-    if (search) {
-      match.$or = [
-        { name: { $regex: search, $options: "i" } },
-        { description: { $regex: search, $options: "i" } },
-        { features: { $elemMatch: { $regex: search, $options: "i" } } },
-      ];
-    }
-
     // 🧩 FILTERS
     if (subCategories.length)
       match.subCategory = { $in: toObjectIdArray(subCategories) };
@@ -390,9 +379,10 @@ const getProducts = async (req, res) => {
     if (brands.length) match.brand = { $in: toObjectIdArray(brands) };
 
     if (materials.length) match.material = { $in: toObjectIdArray(materials) };
+
     if (colors.length) match.color = { $in: colors };
 
-    // 💰 PRICE
+    // 💰 PRICE FILTER
     if (minPrice || maxPrice) {
       match.$and = match.$and || [];
 
@@ -412,7 +402,7 @@ const getProducts = async (req, res) => {
       }
     }
 
-    // 📏 SIZE
+    // 📏 SIZE FILTER
     if (minLength || maxLength) {
       match["size.length"] = {};
       if (minLength) match["size.length"].$gte = Number(minLength);
@@ -431,12 +421,6 @@ const getProducts = async (req, res) => {
       if (maxHeight) match["size.height"].$lte = Number(maxHeight);
     }
 
-    if (minWeight || maxWeight) {
-      match["size.weight"] = {};
-      if (minWeight) match["size.weight"].$gte = Number(minWeight);
-      if (maxWeight) match["size.weight"].$lte = Number(maxWeight);
-    }
-
     // 🔽 SORT
     let sort = { createdAt: -1 };
 
@@ -450,11 +434,11 @@ const getProducts = async (req, res) => {
 
     const searchRegex = search ? new RegExp(search, "i") : null;
 
-    // 🚀 AGGREGATION PIPELINE
+    // 🚀 PIPELINE
     const pipeline = [
       { $match: match },
 
-      // 👤 USER (only for location filter, NOT search)
+      // 👤 USER (for location)
       {
         $lookup: {
           from: "users",
@@ -465,7 +449,6 @@ const getProducts = async (req, res) => {
       },
       { $unwind: "$user" },
 
-      // 📍 LOCATION FILTER ONLY
       ...(locations.length
         ? [
             {
@@ -509,7 +492,39 @@ const getProducts = async (req, res) => {
       },
       { $unwind: { path: "$material", preserveNullAndEmptyArrays: true } },
 
-      // 🔍 GLOBAL SEARCH (NO user.city/state ❌)
+      // 🏷 SUB CATEGORY
+      {
+        $lookup: {
+          from: "subcategories",
+          localField: "subCategory",
+          foreignField: "_id",
+          as: "subCategory",
+        },
+      },
+      {
+        $unwind: {
+          path: "$subCategory",
+          preserveNullAndEmptyArrays: true,
+        },
+      },
+
+      // 🏷 SUB SUB CATEGORY
+      {
+        $lookup: {
+          from: "subsubcategories",
+          localField: "subSubCategory",
+          foreignField: "_id",
+          as: "subSubCategory",
+        },
+      },
+      {
+        $unwind: {
+          path: "$subSubCategory",
+          preserveNullAndEmptyArrays: true,
+        },
+      },
+
+      // 🔍 GLOBAL SEARCH
       ...(search
         ? [
             {
@@ -517,10 +532,13 @@ const getProducts = async (req, res) => {
                 $or: [
                   { name: searchRegex },
                   { description: searchRegex },
-                  { features: { $elemMatch: searchRegex } },
+                  { features: searchRegex },
+
                   { "category.name": searchRegex },
                   { "brand.name": searchRegex },
                   { "material.name": searchRegex },
+                  { "subCategory.name": searchRegex },
+                  { "subSubCategory.name": searchRegex },
                 ],
               },
             },
@@ -534,7 +552,7 @@ const getProducts = async (req, res) => {
       { $skip: (page - 1) * limit },
       { $limit: limit },
 
-      // 🎯 FINAL RESPONSE SHAPE
+      // 🎯 RESPONSE
       {
         $project: {
           id: "$_id",
@@ -548,13 +566,25 @@ const getProducts = async (req, res) => {
           category: {
             name: "$category.name",
           },
+          brand: {
+            name: "$brand.name",
+          },
+          material: {
+            name: "$material.name",
+          },
+          subCategory: {
+            name: "$subCategory.name",
+          },
+          subSubCategory: {
+            name: "$subSubCategory.name",
+          },
         },
       },
     ];
 
     const products = await Product.aggregate(pipeline);
 
-    // 📊 TOTAL COUNT (without pagination)
+    // 📊 COUNT
     const countPipeline = pipeline.filter(
       (stage) => !stage.$skip && !stage.$limit && !stage.$sort,
     );
@@ -564,7 +594,7 @@ const getProducts = async (req, res) => {
     const total = totalResult[0]?.total || 0;
 
     res.json({
-      products: products,
+      products,
       total,
     });
   } catch (err) {
@@ -621,6 +651,43 @@ const getProductsDetailsById = async (req, res) => {
     res.status(200).json({ products: product });
   } catch (err) {
     res.status(500).json({ error: err.message });
+  }
+};
+
+const getSuggestedUserProducts = async (req, res) => {
+  try {
+    const { userId } = req.params;
+
+    const suggestions = await Product.find({ user: userId })
+      .populate("user", "city state")
+      .populate("category", "name")
+      .sort({ featuredProduct: -1, createdAt: -1 }) // ✅ featured first, then latest
+      .limit(4); // ✅ only 4 products
+
+    if (!suggestions.length) {
+      return res.status(200).json({ suggestedProduct: [] });
+    }
+
+    const formatted = suggestions.map((item, i) => ({
+      _id: item._id,
+      name: item.name,
+      user: {
+        city: item.user?.city || "",
+        state: item.user?.state || "",
+      },
+      price: item.price,
+      category: {
+        name: item.category?.name || "",
+      },
+      bannerImage: item.bannerImage,
+    }));
+
+    return res.status(200).json({
+      suggestedProduct: formatted,
+    });
+  } catch (error) {
+    console.error("Suggested Products Error:", error);
+    return res.status(500).json({ message: "Server error" });
   }
 };
 
@@ -731,7 +798,6 @@ const getSuggestedProducts = async (req, res) => {
 
     // 🔹 Format response
     const formatted = suggestions.map((item, i) => ({
-      id: i + 1,
       _id: item._id,
       name: item.name,
       user: {
@@ -763,5 +829,6 @@ module.exports = {
   deleteProduct,
   getFeaturedProducts,
   getProductsDetailsById,
+  getSuggestedUserProducts,
   getSuggestedProducts,
 };

@@ -38,6 +38,7 @@ const subSubCategoryRoutes = require("./routes/subSubCategoryRoutes");
 const brandRoutes = require("./routes/brandRoutes");
 const materialRoutes = require("./routes/materialRoutes");
 const productRoutes = require("./routes/productRoutes");
+const contactUsRoutes = require("./routes/contactUsRoutes");
 
 app.use("/api", authRoutes);
 app.use("/api", categoryRoutes);
@@ -46,6 +47,7 @@ app.use("/api", subSubCategoryRoutes);
 app.use("/api", brandRoutes);
 app.use("/api", materialRoutes);
 app.use("/api", productRoutes);
+app.use("/api", contactUsRoutes);
 // Start server
 app.listen(port, () => {
   console.log(`Server running on port ${port}`);

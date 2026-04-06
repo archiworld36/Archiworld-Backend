@@ -6,7 +6,6 @@ const sizeSchema = new Schema(
     length: Number,
     width: Number,
     height: Number,
-    weight: Number,
   },
   { _id: false },
 );

@@ -230,15 +230,8 @@ const editUser = async (req, res) => {
 
 const getUserById = async (req, res) => {
   try {
-    const parentId = req.userId;
-    if (!parentId)
-      return res.status(400).json({ message: "User ID is required" });
-
-    const descendantUsernames = await getUserAndDescendantNames(parentId);
-
     let users = await User.findOne({
       _id: req.params.userId,
-      username: { $in: descendantUsernames },
     })
       .select("-password")
       .populate("subscription");

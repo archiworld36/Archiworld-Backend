@@ -12,6 +12,7 @@ const {
   getProductsDetailsById,
   getSuggestedProducts,
   getProducts,
+  getSuggestedUserProducts,
 } = require("../controllers/productsController.js");
 
 router.post(
@@ -41,6 +42,7 @@ router.post("/products", getProducts);
 router.get("/get-featured-products", getFeaturedProducts);
 router.get("/get-product-details/:productId", getProductsDetailsById);
 router.get("/suggested-products/:productId", getSuggestedProducts);
+router.get("/suggested-user-products/:userId", getSuggestedUserProducts);
 router.get("/get-products-by-user-id", auth, getProductsByUserId);
 router.get("/get-product/:productId", auth, getProductsByProductId);
 

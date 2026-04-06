@@ -58,7 +58,7 @@ router.put(
   editUser,
 );
 router.post("/login", loginUser);
-router.get("/get-user/:userId", auth, getUserById);
+router.get("/get-user/:userId", getUserById);
 router.post("/parent", auth, getAllChildUsers);
 router.delete("/delete-user/:userId", auth, deleteUser);
 router.put("/change-password", auth, changePassword);
