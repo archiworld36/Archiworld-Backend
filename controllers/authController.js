@@ -234,7 +234,13 @@ const getUserById = async (req, res) => {
       _id: req.params.userId,
     })
       .select("-password")
-      .populate("subscription");
+      .populate("subscription")
+      .populate({
+        path: "subCategories", // ✅ populate subCategory
+      })
+      .populate({
+        path: "category", // ✅ populate category
+      });
     let parentName = null;
     const parent = await User.findById(users.parentId).select("name");
     parentName = parent?.name || null;

@@ -4,6 +4,7 @@ const Product = require("../models/products");
 const { getUserAndDescendantIds } = require("../utils/utils");
 const { Types } = require("mongoose");
 
+const toObjectId = (id) => new mongoose.Types.ObjectId(id);
 const toObjectIdArray = (arr) => arr.map((id) => new Types.ObjectId(id));
 
 const createProduct = async (req, res) => {
@@ -333,6 +334,8 @@ const getProducts = async (req, res) => {
       search = "",
       sortBy = "",
       locations,
+      category,
+      subCategory,
       subCategories,
       subSubCategories,
       brands,
@@ -370,6 +373,14 @@ const getProducts = async (req, res) => {
     const match = {};
 
     // 🧩 FILTERS
+    if (category) {
+      match.category = toObjectId(category);
+    }
+
+    if (subCategory) {
+      match.subCategory = toObjectId(subCategory);
+    }
+
     if (subCategories.length)
       match.subCategory = { $in: toObjectIdArray(subCategories) };
 
