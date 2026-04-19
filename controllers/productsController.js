@@ -4,9 +4,6 @@ const Product = require("../models/products");
 const { getUserAndDescendantIds } = require("../utils/utils");
 const { Types } = require("mongoose");
 
-const toObjectId = (id) => new mongoose.Types.ObjectId(id);
-const toObjectIdArray = (arr) => arr.map((id) => new Types.ObjectId(id));
-
 const createProduct = async (req, res) => {
   try {
     const {
@@ -265,82 +262,17 @@ const deleteProduct = async (req, res) => {
 const getProductsByUserId = async (req, res) => {
   try {
     const parentId = req.userId;
-    const descendantIds = await getUserAndDescendantIds(parentId);
-    const products = await Product.find({
-      user: { $in: descendantIds },
-    })
-      .populate({
-        path: "user",
-        select: "-password",
-        populate: {
-          path: "subscription",
-        },
-      })
-      .populate({
-        path: "subCategory", // ✅ populate subCategory
-      })
-      .populate({
-        path: "subSubCategory",
-      })
-      .populate({
-        path: "category", // ✅ populate category
-      })
-      .populate({
-        path: "material", // ✅ populate material
-      })
-      .populate({
-        path: "brand", // ✅ populate brand
-      })
-      .lean();
-    res.status(200).json({ products: products });
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-};
-
-const getProductsByProductId = async (req, res) => {
-  try {
-    const parentId = req.userId;
-    const { productId } = req.params;
-    const descendantIds = await getUserAndDescendantIds(parentId);
-    const product = await Product.findOne({
-      _id: productId,
-      user: { $in: descendantIds },
-    })
-      .populate({
-        path: "user",
-        select: "-password",
-        populate: {
-          path: "subscription",
-        },
-      })
-      .populate("category")
-      .populate("subCategory")
-      .populate("subSubCategory")
-      .populate("brand")
-      .populate("material")
-      .lean();
-    res.status(200).json({ products: product });
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-};
-
-const getProducts = async (req, res) => {
-  try {
     let {
       page = 1,
       limit = 24,
       search = "",
-      sortBy = "",
       locations,
-      category,
-      subCategory,
       subCategories,
       subSubCategories,
       brands,
       materials,
       colors,
+      featuredProduct,
       minPrice,
       maxPrice,
       minLength,
@@ -350,13 +282,20 @@ const getProducts = async (req, res) => {
       minHeight,
       maxHeight,
     } = req.body;
-
+    const descendantIds = await getUserAndDescendantIds(parentId);
     page = parseInt(page);
     limit = parseInt(limit);
 
-    // ✅ helper
+    // ✅ FIX
+    if (isNaN(page) || page < 1) page = 1;
+    if (isNaN(limit) || limit < 1) limit = 24;
+
     const toArray = (val) =>
       typeof val === "string" ? val.split(",") : val || [];
+
+    const toObjectId = (id) => new mongoose.Types.ObjectId(id);
+    const toObjectIdArray = (arr) =>
+      arr.map((id) => new mongoose.Types.ObjectId(id));
 
     locations = toArray(locations);
     subCategories = toArray(subCategories);
@@ -365,21 +304,12 @@ const getProducts = async (req, res) => {
     materials = toArray(materials);
     colors = toArray(colors);
 
-    // ✅ ignore "Pan India"
     if (locations.includes("Pan India")) {
       locations = [];
     }
 
     const match = {};
-
-    // 🧩 FILTERS
-    if (category) {
-      match.category = toObjectId(category);
-    }
-
-    if (subCategory) {
-      match.subCategory = toObjectId(subCategory);
-    }
+    match.user = { $in: toObjectIdArray(descendantIds) };
 
     if (subCategories.length)
       match.subCategory = { $in: toObjectIdArray(subCategories) };
@@ -388,10 +318,15 @@ const getProducts = async (req, res) => {
       match.subSubCategory = { $in: toObjectIdArray(subSubCategories) };
 
     if (brands.length) match.brand = { $in: toObjectIdArray(brands) };
-
     if (materials.length) match.material = { $in: toObjectIdArray(materials) };
-
     if (colors.length) match.color = { $in: colors };
+    if (featuredProduct !== undefined) {
+      if (featuredProduct === "true" || featuredProduct === true) {
+        match.featuredProduct = true;
+      } else if (featuredProduct === "false" || featuredProduct === false) {
+        match.featuredProduct = false;
+      }
+    }
 
     // 💰 PRICE FILTER
     if (minPrice || maxPrice) {
@@ -432,24 +367,18 @@ const getProducts = async (req, res) => {
       if (maxHeight) match["size.height"].$lte = Number(maxHeight);
     }
 
-    // 🔽 SORT
-    let sort = { createdAt: -1 };
-
-    if (sortBy === "Price: Low to High") {
-      sort = { "price.min": 1, "price.max": 1 };
-    }
-
-    if (sortBy === "Price: High to Low") {
-      sort = { "price.min": -1, "price.max": -1 };
-    }
+    // 🔽 SORT (DEFAULT: subscription priority)
+    let sort = {
+      subscriptionPriority: 1,
+      createdAt: -1,
+    };
 
     const searchRegex = search ? new RegExp(search, "i") : null;
 
     // 🚀 PIPELINE
     const pipeline = [
       { $match: match },
-
-      // 👤 USER (for location)
+      // 👤 USER LOOKUP (ADD THIS FIRST)
       {
         $lookup: {
           from: "users",
@@ -458,8 +387,14 @@ const getProducts = async (req, res) => {
           as: "user",
         },
       },
-      { $unwind: "$user" },
+      {
+        $unwind: {
+          path: "$user",
+          preserveNullAndEmptyArrays: true,
+        },
+      },
 
+      // ✅ THEN apply location filter
       ...(locations.length
         ? [
             {
@@ -469,6 +404,31 @@ const getProducts = async (req, res) => {
             },
           ]
         : []),
+
+      // 💳 SUBSCRIPTION PLAN
+      {
+        $lookup: {
+          from: "subscriptionplans",
+          localField: "user.subscription",
+          foreignField: "_id",
+          as: "subscription",
+        },
+      },
+      {
+        $unwind: {
+          path: "$subscription",
+          preserveNullAndEmptyArrays: true,
+        },
+      },
+
+      // ⭐ PRIORITY FIELD
+      {
+        $addFields: {
+          subscriptionPriority: {
+            $ifNull: ["$subscription.priority", 9999],
+          },
+        },
+      },
 
       // 🏷 CATEGORY
       {
@@ -535,7 +495,7 @@ const getProducts = async (req, res) => {
         },
       },
 
-      // 🔍 GLOBAL SEARCH
+      // 🔍 SEARCH
       ...(search
         ? [
             {
@@ -544,7 +504,340 @@ const getProducts = async (req, res) => {
                   { name: searchRegex },
                   { description: searchRegex },
                   { features: searchRegex },
+                  { "category.name": searchRegex },
+                  { "brand.name": searchRegex },
+                  { "material.name": searchRegex },
+                  { "subCategory.name": searchRegex },
+                  { "subSubCategory.name": searchRegex },
+                ],
+              },
+            },
+          ]
+        : []),
 
+      // 🔽 SORT
+      { $sort: sort },
+
+      // 📄 PAGINATION
+      { $skip: (page - 1) * limit },
+      { $limit: limit },
+
+      // 🎯 RESPONSE
+      {
+        $project: {
+          id: "$_id",
+          name: 1,
+          price: 1,
+          bannerImage: 1,
+          user: {
+            name: "$user.name",
+            city: "$user.city",
+            state: "$user.state",
+          },
+          category: { name: "$category.name" },
+          brand: { name: "$brand.name" },
+          material: { name: "$material.name" },
+          subCategory: { name: "$subCategory.name" },
+          subSubCategory: { name: "$subSubCategory.name" },
+          subscriptionPriority: 1, // optional (for debugging)
+        },
+      },
+    ];
+
+    const products = await Product.aggregate(pipeline);
+
+    // 📊 COUNT
+    const countPipeline = pipeline.filter(
+      (stage) => !stage.$skip && !stage.$limit && !stage.$sort,
+    );
+    countPipeline.push({ $count: "total" });
+
+    const totalResult = await Product.aggregate(countPipeline);
+    const total = totalResult[0]?.total || 0;
+
+    res.status(200).json({ products: products, total });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+};
+
+const getProductsByProductId = async (req, res) => {
+  try {
+    const parentId = req.userId;
+    const { productId } = req.params;
+    const descendantIds = await getUserAndDescendantIds(parentId);
+    const product = await Product.findOne({
+      _id: productId,
+      user: { $in: descendantIds },
+    })
+      .populate({
+        path: "user",
+        select: "-password",
+        populate: {
+          path: "subscription",
+        },
+      })
+      .populate("category")
+      .populate("subCategory")
+      .populate("subSubCategory")
+      .populate("brand")
+      .populate("material")
+      .lean();
+    res.status(200).json({ products: product });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+};
+
+const getProducts = async (req, res) => {
+  try {
+    let {
+      page = 1,
+      limit = 24,
+      search = "",
+      sortBy = "",
+      locations,
+      category,
+      subCategory,
+      subCategories,
+      subSubCategories,
+      brands,
+      materials,
+      colors,
+      minPrice,
+      maxPrice,
+      minLength,
+      maxLength,
+      minWidth,
+      maxWidth,
+      minHeight,
+      maxHeight,
+    } = req.body;
+
+    page = parseInt(page);
+    limit = parseInt(limit);
+
+    const toArray = (val) =>
+      typeof val === "string" ? val.split(",") : val || [];
+
+    const toObjectId = (id) => new mongoose.Types.ObjectId(id);
+    const toObjectIdArray = (arr) =>
+      arr.map((id) => new mongoose.Types.ObjectId(id));
+
+    locations = toArray(locations);
+    subCategories = toArray(subCategories);
+    subSubCategories = toArray(subSubCategories);
+    brands = toArray(brands);
+    materials = toArray(materials);
+    colors = toArray(colors);
+
+    if (locations.includes("Pan India")) {
+      locations = [];
+    }
+
+    const match = {};
+
+    // 🧩 FILTERS
+    if (category) match.category = toObjectId(category);
+    if (subCategory) match.subCategory = toObjectId(subCategory);
+
+    if (subCategories.length)
+      match.subCategory = { $in: toObjectIdArray(subCategories) };
+
+    if (subSubCategories.length)
+      match.subSubCategory = { $in: toObjectIdArray(subSubCategories) };
+
+    if (brands.length) match.brand = { $in: toObjectIdArray(brands) };
+    if (materials.length) match.material = { $in: toObjectIdArray(materials) };
+    if (colors.length) match.color = { $in: colors };
+
+    // 💰 PRICE FILTER
+    if (minPrice || maxPrice) {
+      match.$and = match.$and || [];
+
+      if (minPrice && maxPrice) {
+        match.$and.push({
+          "price.min": { $lte: Number(maxPrice) },
+          "price.max": { $gte: Number(minPrice) },
+        });
+      } else if (minPrice) {
+        match.$and.push({
+          "price.max": { $gte: Number(minPrice) },
+        });
+      } else if (maxPrice) {
+        match.$and.push({
+          "price.min": { $lte: Number(maxPrice) },
+        });
+      }
+    }
+
+    // 📏 SIZE FILTER
+    if (minLength || maxLength) {
+      match["size.length"] = {};
+      if (minLength) match["size.length"].$gte = Number(minLength);
+      if (maxLength) match["size.length"].$lte = Number(maxLength);
+    }
+
+    if (minWidth || maxWidth) {
+      match["size.width"] = {};
+      if (minWidth) match["size.width"].$gte = Number(minWidth);
+      if (maxWidth) match["size.width"].$lte = Number(maxWidth);
+    }
+
+    if (minHeight || maxHeight) {
+      match["size.height"] = {};
+      if (minHeight) match["size.height"].$gte = Number(minHeight);
+      if (maxHeight) match["size.height"].$lte = Number(maxHeight);
+    }
+
+    // 🔽 SORT (DEFAULT: subscription priority)
+    let sort = {
+      subscriptionPriority: 1,
+      createdAt: -1,
+    };
+
+    if (sortBy === "Price: Low to High") {
+      sort = {
+        subscriptionPriority: 1,
+        "price.min": 1,
+        "price.max": 1,
+      };
+    }
+
+    if (sortBy === "Price: High to Low") {
+      sort = {
+        subscriptionPriority: 1,
+        "price.min": -1,
+        "price.max": -1,
+      };
+    }
+
+    const searchRegex = search ? new RegExp(search, "i") : null;
+
+    // 🚀 PIPELINE
+    const pipeline = [
+      { $match: match },
+
+      // 👤 USER
+      {
+        $lookup: {
+          from: "users",
+          localField: "user",
+          foreignField: "_id",
+          as: "user",
+        },
+      },
+      { $unwind: "$user" },
+
+      ...(locations.length
+        ? [
+            {
+              $match: {
+                "user.state": { $in: locations },
+              },
+            },
+          ]
+        : []),
+
+      // 💳 SUBSCRIPTION PLAN
+      {
+        $lookup: {
+          from: "subscriptionplans",
+          localField: "user.subscription",
+          foreignField: "_id",
+          as: "subscription",
+        },
+      },
+      {
+        $unwind: {
+          path: "$subscription",
+          preserveNullAndEmptyArrays: true,
+        },
+      },
+
+      // ⭐ PRIORITY FIELD
+      {
+        $addFields: {
+          subscriptionPriority: {
+            $ifNull: ["$subscription.priority", 9999],
+          },
+        },
+      },
+
+      // 🏷 CATEGORY
+      {
+        $lookup: {
+          from: "categories",
+          localField: "category",
+          foreignField: "_id",
+          as: "category",
+        },
+      },
+      { $unwind: { path: "$category", preserveNullAndEmptyArrays: true } },
+
+      // 🏷 BRAND
+      {
+        $lookup: {
+          from: "brands",
+          localField: "brand",
+          foreignField: "_id",
+          as: "brand",
+        },
+      },
+      { $unwind: { path: "$brand", preserveNullAndEmptyArrays: true } },
+
+      // 🏷 MATERIAL
+      {
+        $lookup: {
+          from: "materials",
+          localField: "material",
+          foreignField: "_id",
+          as: "material",
+        },
+      },
+      { $unwind: { path: "$material", preserveNullAndEmptyArrays: true } },
+
+      // 🏷 SUB CATEGORY
+      {
+        $lookup: {
+          from: "subcategories",
+          localField: "subCategory",
+          foreignField: "_id",
+          as: "subCategory",
+        },
+      },
+      {
+        $unwind: {
+          path: "$subCategory",
+          preserveNullAndEmptyArrays: true,
+        },
+      },
+
+      // 🏷 SUB SUB CATEGORY
+      {
+        $lookup: {
+          from: "subsubcategories",
+          localField: "subSubCategory",
+          foreignField: "_id",
+          as: "subSubCategory",
+        },
+      },
+      {
+        $unwind: {
+          path: "$subSubCategory",
+          preserveNullAndEmptyArrays: true,
+        },
+      },
+
+      // 🔍 SEARCH
+      ...(search
+        ? [
+            {
+              $match: {
+                $or: [
+                  { name: searchRegex },
+                  { description: searchRegex },
+                  { features: searchRegex },
                   { "category.name": searchRegex },
                   { "brand.name": searchRegex },
                   { "material.name": searchRegex },
@@ -574,21 +867,12 @@ const getProducts = async (req, res) => {
             city: "$user.city",
             state: "$user.state",
           },
-          category: {
-            name: "$category.name",
-          },
-          brand: {
-            name: "$brand.name",
-          },
-          material: {
-            name: "$material.name",
-          },
-          subCategory: {
-            name: "$subCategory.name",
-          },
-          subSubCategory: {
-            name: "$subSubCategory.name",
-          },
+          category: { name: "$category.name" },
+          brand: { name: "$brand.name" },
+          material: { name: "$material.name" },
+          subCategory: { name: "$subCategory.name" },
+          subSubCategory: { name: "$subSubCategory.name" },
+          subscriptionPriority: 1, // optional (for debugging)
         },
       },
     ];
@@ -604,10 +888,7 @@ const getProducts = async (req, res) => {
     const totalResult = await Product.aggregate(countPipeline);
     const total = totalResult[0]?.total || 0;
 
-    res.json({
-      products,
-      total,
-    });
+    res.json({ products, total });
   } catch (err) {
     console.error(err);
     res.status(500).json({ message: "Server Error" });

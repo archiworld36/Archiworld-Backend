@@ -72,10 +72,12 @@ const registerUser = async (req, res) => {
 
     let subscriptionId = null;
 
-    if (subscription) {
-      const plan = await SubscriptionPlan.findOne({
-        _id: subscription,
-      });
+    if (
+      subscription &&
+      subscription !== "null" &&
+      subscription !== "undefined"
+    ) {
+      const plan = await SubscriptionPlan.findById(subscription);
 
       if (!plan) {
         return res.status(400).json({
@@ -150,6 +152,15 @@ const editUser = async (req, res) => {
 
     // -------- JSON FIELDS --------
     Object.keys(req.body).forEach((key) => {
+      let value = req.body[key];
+
+      // ✅ Handle explicit null
+      if (value === "null" || value === null) {
+        updateData[key] = null;
+        return;
+      }
+
+      // ✅ Handle JSON fields
       if (
         [
           "workingSchedule",
@@ -158,9 +169,13 @@ const editUser = async (req, res) => {
           "subCategories",
         ].includes(key)
       ) {
-        updateData[key] = JSON.parse(req.body[key]);
+        try {
+          updateData[key] = value ? JSON.parse(value) : null;
+        } catch (err) {
+          updateData[key] = null;
+        }
       } else {
-        updateData[key] = req.body[key];
+        updateData[key] = value;
       }
     });
 
