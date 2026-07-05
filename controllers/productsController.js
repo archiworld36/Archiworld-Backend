@@ -18,6 +18,9 @@ const createProduct = async (req, res) => {
       color,
       size,
       price,
+      showColor,
+      showSize,
+      priceUnit,
       features,
       catalogues,
       featuredProduct,
@@ -93,7 +96,9 @@ const createProduct = async (req, res) => {
       featuredProduct,
       bannerImage,
       images,
-
+      showSize: showSize === "true" || showSize === true,
+      showColor: showColor === "true" || showColor === true,
+      priceUnit,
       color: parsedColor,
       size: parsedSize,
       price: parsedPrice,
@@ -150,6 +155,12 @@ const updateProduct = async (req, res) => {
     if (data.size) data.size = safeParse(data.size);
     if (data.price) data.price = safeParse(data.price);
     if (data.features) data.features = safeParse(data.features);
+    if (data.showSize !== undefined) {
+      data.showSize = data.showSize === "true" || data.showSize === true;
+    }
+    if (data.showColor !== undefined) {
+      data.showColor = data.showColor === "true" || data.showColor === true;
+    }
     const parsedCatalogues = data.catalogues ? JSON.parse(data.catalogues) : [];
 
     // ---------- BANNER IMAGE ----------
@@ -693,7 +704,6 @@ const getProducts = async (req, res) => {
     // 🔽 SORT (DEFAULT: subscription priority)
     let sort = {
       subscriptionPriority: 1,
-      createdAt: -1,
     };
 
     if (sortBy === "Price: Low to High") {
@@ -709,6 +719,12 @@ const getProducts = async (req, res) => {
         subscriptionPriority: 1,
         "price.min": -1,
         "price.max": -1,
+      };
+    }
+    if (sortBy === "Newest First") {
+      sort = {
+        subscriptionPriority: 1,
+        createdAt: -1,
       };
     }
 
@@ -867,6 +883,7 @@ const getProducts = async (req, res) => {
             city: "$user.city",
             state: "$user.state",
           },
+          priceUnit: 1,
           category: { name: "$category.name" },
           brand: { name: "$brand.name" },
           material: { name: "$material.name" },
@@ -900,7 +917,7 @@ const getFeaturedProducts = async (req, res) => {
     const products = await Product.find({
       featuredProduct: true,
     })
-      .select("id name description bannerImage user") // only needed fields
+      .select("id name description priceUnit bannerImage user") // only needed fields
       .populate({
         path: "user",
         select: "id name profileLogo", // only required user fields
@@ -953,6 +970,7 @@ const getSuggestedUserProducts = async (req, res) => {
     const suggestions = await Product.find({ user: userId })
       .populate("user", "city state")
       .populate("category", "name")
+      .populate("brand", "name")
       .sort({ featuredProduct: -1, createdAt: -1 }) // ✅ featured first, then latest
       .limit(4); // ✅ only 4 products
 
@@ -970,6 +988,9 @@ const getSuggestedUserProducts = async (req, res) => {
       price: item.price,
       category: {
         name: item.category?.name || "",
+      },
+      brand: {
+        name: item.brand?.name || "",
       },
       bannerImage: item.bannerImage,
     }));
@@ -1009,7 +1030,8 @@ const getSuggestedProducts = async (req, res) => {
       })
         .limit(limit * 2) // ✅ over-fetch to handle duplicates
         .populate("category", "name")
-        .populate("user", "city state");
+        .populate("user", "city state")
+        .populate("brand", "name");
     };
 
     // 🔹 Helper to safely push unique products
@@ -1034,6 +1056,7 @@ const getSuggestedProducts = async (req, res) => {
           category: refProduct.category,
           subCategory: refProduct.subCategory,
           subSubCategory: refProduct.subSubCategory,
+          brand: refProduct.brand,
         },
         remaining,
       );
@@ -1049,6 +1072,7 @@ const getSuggestedProducts = async (req, res) => {
           user: refProduct.user,
           category: refProduct.category,
           subCategory: refProduct.subCategory,
+          brand: refProduct.brand,
         },
         remaining,
       );
@@ -1063,6 +1087,7 @@ const getSuggestedProducts = async (req, res) => {
         {
           user: refProduct.user,
           category: refProduct.category,
+          brand: refProduct.brand,
         },
         remaining,
       );
@@ -1092,6 +1117,7 @@ const getSuggestedProducts = async (req, res) => {
     const formatted = suggestions.map((item, i) => ({
       _id: item._id,
       name: item.name,
+      priceUnit: item.priceUnit,
       user: {
         city: item.user?.city || "",
         state: item.user?.state || "",
@@ -1099,6 +1125,9 @@ const getSuggestedProducts = async (req, res) => {
       price: item.price,
       category: {
         name: item.category?.name || "",
+      },
+      brand: {
+        name: item.brand?.name || "",
       },
       bannerImage: item.bannerImage,
     }));
