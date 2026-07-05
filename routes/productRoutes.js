@@ -14,6 +14,8 @@ const {
   getProducts,
   getSuggestedUserProducts,
 } = require("../controllers/productsController.js");
+const { getFeaturedLogos } = require("../controllers/featuredLogo.js");
+const featuredLogo = require("../models/featuredLogo.js");
 
 router.post(
   "/create-product",
@@ -45,5 +47,7 @@ router.get("/suggested-products/:productId", getSuggestedProducts);
 router.get("/suggested-user-products/:userId", getSuggestedUserProducts);
 router.post("/get-products-by-user-id", auth, getProductsByUserId);
 router.get("/get-product/:productId", auth, getProductsByProductId);
+
+router.get("/get-featured-logos", getFeaturedLogos);
 
 module.exports = router;
