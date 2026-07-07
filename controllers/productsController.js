@@ -705,6 +705,7 @@ const getProducts = async (req, res) => {
     let sort = {
       featuredProduct: -1,
       subscriptionPriority: 1,
+      createdAt: -1,
     };
 
     if (sortBy === "Price: Low to High") {
