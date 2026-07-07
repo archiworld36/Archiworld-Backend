@@ -703,6 +703,7 @@ const getProducts = async (req, res) => {
 
     // 🔽 SORT (DEFAULT: subscription priority)
     let sort = {
+      featuredProduct: -1,
       subscriptionPriority: 1,
     };
 
