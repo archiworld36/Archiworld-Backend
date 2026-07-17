@@ -21,6 +21,8 @@ app.use(
       "http://3.108.61.216",
       "http://archiworld.in",
       "https://archiworld.in",
+      "https://products.archiworld.in",
+      "https://www.products.archiworld.in",
       "https://www.archiworld.in",
     ], // Replace '*' with actual origin in production
     credentials: true,
